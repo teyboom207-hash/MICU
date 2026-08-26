@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>คลังพัสดุวอร์ด | Ward Supply Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-emblem">
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <circle cx="28" cy="28" r="28" fill="#1E8C7A"/>
+        <path d="M28 14v28M14 28h28" stroke="#EAF7F0" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1>คลังพัสดุวอร์ด</h1>
+    <p class="login-sub">ระบบเช็คของ เติมของ ใช้ของ และแจ้งเตือนวันหมดอายุ</p>
+
+    <form id="login-form">
+      <label class="field-label" for="login-email">อีเมลประจำวอร์ด</label>
+      <input type="email" id="login-email" placeholder="เช่น ward-medicine@hospital.go.th" required>
+
+      <label class="field-label" for="login-wardname">ชื่อวอร์ด</label>
+      <input type="text" id="login-wardname" placeholder="เช่น วอร์ดอายุรกรรมชาย" required>
+
+      <button type="submit" class="btn btn-primary btn-block">เข้าสู่ระบบ</button>
+    </form>
+    <p class="login-note">💡 แต่ละอีเมลคือข้อมูลของแต่ละวอร์ด แยกจากกันโดยอัตโนมัติ และบันทึกไว้ในเครื่องนี้เท่านั้น</p>
+  </div>
+</div>
+
+<!-- ============ APP SCREEN ============ -->
+<div id="app-screen" class="app-wrap hidden">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 56 56" fill="none">
+        <circle cx="28" cy="28" r="28" fill="#1E8C7A"/>
+        <path d="M28 14v28M14 28h28" stroke="#EAF7F0" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+      <span>คลังพัสดุวอร์ด</span>
+    </div>
+    <button class="nav-btn active" data-view="dashboard">
+      <span class="nav-ic">📊</span> แดชบอร์ด
+    </button>
+    <button class="nav-btn" data-view="stockin">
+      <span class="nav-ic">📥</span> เติมพัสดุ
+    </button>
+    <button class="nav-btn" data-view="stockout">
+      <span class="nav-ic">📤</span> เบิกใช้พัสดุ
+    </button>
+    <button class="nav-btn" data-view="reports">
+      <span class="nav-ic">🗓️</span> สรุปรายเดือน / ค้นหา
+    </button>
+    <div class="sidebar-spacer"></div>
+    <button class="nav-btn logout-btn" id="logout-btn">
+      <span class="nav-ic">🚪</span> ออกจากระบบ
+    </button>
+  </nav>
+
+  <!-- Mobile top bar -->
+  <div class="topbar">
+    <button id="hamburger" class="hamburger" aria-label="เมนู">☰</button>
+    <div class="topbar-ward">
+      <span id="ward-name-display">วอร์ด</span>
+      <span class="topbar-email" id="ward-email-display"></span>
+    </div>
+  </div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Main content -->
+  <main class="main-content">
+
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <header class="view-header">
+        <div>
+          <h2>📊 แดชบอร์ดคลังพัสดุ</h2>
+          <p class="view-sub">ภาพรวมวันหมดอายุ แจ้งเตือนล่วงหน้า 60 วัน</p>
+        </div>
+        <button class="btn btn-ghost" id="dash-print-btn">🖨️ พิมพ์ / PDF</button>
+      </header>
+
+      <div class="summary-grid">
+        <div class="summary-card card-red">
+          <div class="summary-top">
+            <span class="summary-dot"></span>
+            <span class="summary-title">หมดอายุแล้ว</span>
+          </div>
+          <div class="summary-num" id="sum-red-qty">0</div>
+          <div class="summary-unit">ชิ้น • <span id="sum-red-items">0</span> รายการ</div>
+        </div>
+        <div class="summary-card card-orange">
+          <div class="summary-top">
+            <span class="summary-dot"></span>
+            <span class="summary-title">ใกล้หมดอายุ (≤60 วัน)</span>
+          </div>
+          <div class="summary-num" id="sum-orange-qty">0</div>
+          <div class="summary-unit">ชิ้น • <span id="sum-orange-items">0</span> รายการ</div>
+        </div>
+        <div class="summary-card card-green">
+          <div class="summary-top">
+            <span class="summary-dot"></span>
+            <span class="summary-title">ยังไม่หมดอายุ</span>
+          </div>
+          <div class="summary-num" id="sum-green-qty">0</div>
+          <div class="summary-unit">ชิ้น • <span id="sum-green-items">0</span> รายการ</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-toolbar">
+          <h3>รายการพัสดุคงคลัง (เรียงตามวันหมดอายุ)</h3>
+          <input type="text" id="dash-search" placeholder="🔍 ค้นหาชื่อพัสดุ...">
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="dash-table">
+            <thead>
+              <tr>
+                <th>สถานะ</th>
+                <th>ชื่อพัสดุ</th>
+                <th>จำนวนคงเหลือ</th>
+                <th>วันหมดอายุ</th>
+                <th>สถานะวัน</th>
+              </tr>
+            </thead>
+            <tbody id="dash-tbody"></tbody>
+          </table>
+          <p class="empty-state" id="dash-empty">ยังไม่มีพัสดุในคลัง ลองเพิ่มพัสดุที่หน้า "เติมพัสดุ" ได้เลย 📦</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- STOCK IN -->
+    <section class="view" id="view-stockin">
+      <header class="view-header">
+        <div>
+          <h2>📥 ระบบเติมพัสดุเข้าคลัง</h2>
+          <p class="view-sub">เพิ่มของใหม่ หรือเติมของเดิม พร้อมระบุวันหมดอายุ</p>
+        </div>
+      </header>
+
+      <div class="panel form-panel">
+        <form id="stockin-form">
+          <div class="form-row">
+            <div class="field">
+              <label class="field-label">เลือกพัสดุ</label>
+              <select id="stockin-item-select">
+                <option value="">-- เลือกพัสดุ --</option>
+                <option value="__new__">➕ เพิ่มพัสดุใหม่</option>
+              </select>
+            </div>
+            <div class="field hidden" id="stockin-newname-wrap">
+              <label class="field-label">ชื่อพัสดุใหม่</label>
+              <input type="text" id="stockin-newname" placeholder="เช่น ถุงมือยางไซส์ M">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label class="field-label">จำนวน (ชิ้น)</label>
+              <input type="number" id="stockin-qty" min="1" step="1" placeholder="0" required>
+            </div>
+            <div class="field">
+              <label class="field-label">วันหมดอายุ</label>
+              <input type="date" id="stockin-expiry" required>
+            </div>
+            <div class="field">
+              <label class="field-label">วันที่เติมเข้าคลัง</label>
+              <input type="date" id="stockin-date" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">➕ บันทึกการเติมพัสดุ</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>ประวัติการเติมพัสดุล่าสุด</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>วันที่เติม</th><th>ชื่อพัสดุ</th><th>จำนวน</th><th>วันหมดอายุ</th><th></th></tr>
+            </thead>
+            <tbody id="stockin-tbody"></tbody>
+          </table>
+          <p class="empty-state" id="stockin-empty">ยังไม่มีประวัติการเติมพัสดุ</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- STOCK OUT -->
+    <section class="view" id="view-stockout">
+      <header class="view-header">
+        <div>
+          <h2>📤 ระบบเบิกใช้พัสดุ</h2>
+          <p class="view-sub">บันทึกจำนวนที่ใช้ไปและวันที่ใช้ (ระบบจะตัดของหมดอายุก่อนอัตโนมัติ)</p>
+        </div>
+      </header>
+
+      <div class="panel form-panel">
+        <form id="stockout-form">
+          <div class="form-row">
+            <div class="field">
+              <label class="field-label">เลือกพัสดุ</label>
+              <select id="stockout-item-select" required>
+                <option value="">-- เลือกพัสดุ --</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label">คงเหลือในคลัง</label>
+              <input type="text" id="stockout-available" value="—" disabled>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label class="field-label">จำนวนที่ใช้ (ชิ้น)</label>
+              <input type="number" id="stockout-qty" min="1" step="1" placeholder="0" required>
+            </div>
+            <div class="field">
+              <label class="field-label">วันที่ใช้</label>
+              <input type="date" id="stockout-date" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">✅ บันทึกการเบิกใช้</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h3>ประวัติการเบิกใช้ล่าสุด</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>วันที่ใช้</th><th>ชื่อพัสดุ</th><th>จำนวน</th><th></th></tr>
+            </thead>
+            <tbody id="stockout-tbody"></tbody>
+          </table>
+          <p class="empty-state" id="stockout-empty">ยังไม่มีประวัติการเบิกใช้</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPORTS -->
+    <section class="view" id="view-reports">
+      <header class="view-header">
+        <div>
+          <h2>🗓️ สรุปรายเดือน &amp; ค้นหาพัสดุ</h2>
+          <p class="view-sub">ดูยอดเติมเข้า-เบิกออกรายเดือน หรือค้นหาตามชื่อพัสดุ</p>
+        </div>
+        <button class="btn btn-ghost" id="report-print-btn">🖨️ พิมพ์ / PDF</button>
+      </header>
+
+      <div class="panel form-panel">
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label">เดือน</label>
+            <select id="report-month">
+              <option value="">-- ทุกเดือน --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">ปี</label>
+            <select id="report-year">
+              <option value="">-- ทุกปี --</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">ค้นหาชื่อพัสดุ</label>
+            <input type="text" id="report-search" placeholder="พิมพ์ชื่อพัสดุ...">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="report-filter-btn">🔍 แสดงผล</button>
+          <button class="btn btn-ghost" id="report-clear-btn">ล้างตัวกรอง</button>
+        </div>
+      </div>
+
+      <div class="report-summary-grid">
+        <div class="mini-summary mini-in">
+          <div class="mini-label">รวมเติมเข้าคลัง</div>
+          <div class="mini-num" id="report-total-in">0</div>
+          <div class="mini-unit">ชิ้น</div>
+        </div>
+        <div class="mini-summary mini-out">
+          <div class="mini-label">รวมเบิกออกจากคลัง</div>
+          <div class="mini-num" id="report-total-out">0</div>
+          <div class="mini-unit">ชิ้น</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>📥 รายการเติมเข้าคลัง</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>วันที่</th><th>ชื่อพัสดุ</th><th>จำนวน</th><th>วันหมดอายุ</th></tr></thead>
+            <tbody id="report-in-tbody"></tbody>
+          </table>
+          <p class="empty-state" id="report-in-empty">ไม่พบข้อมูล</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>📤 รายการเบิกออกจากคลัง</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>วันที่</th><th>ชื่อพัสดุ</th><th>จำนวน</th></tr></thead>
+            <tbody id="report-out-tbody"></tbody>
+          </table>
+          <p class="empty-state" id="report-out-empty">ไม่พบข้อมูล</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ PRINT AREA (used for PDF export via browser print) ============ -->
+<div id="print-area"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
