@@ -312,6 +312,63 @@ input, select{ font-family:'Sarabun', sans-serif; }
   .print-status-green{ color:#2C8A46; font-weight:700; }
 }
 
+/* ============ CUSTOM DATE INPUT & CALENDAR (always ค.ศ. / Gregorian) ============ */
+.date-input-custom{
+  cursor: pointer; background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="%231E8C7A" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>') no-repeat right 14px center;
+  background-size: 18px 18px; padding-right: 42px;
+}
+.date-input-custom:focus{ border-color: var(--teal); box-shadow: 0 0 0 4px rgba(30,140,122,.12); }
+
+.cal-overlay{
+  position: fixed; inset:0; background: rgba(15,30,28,.45); z-index: 200;
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.cal-overlay.hidden{ display:none; }
+.wheel-popup{
+  background:#fff; border-radius: 24px 24px 0 0; width:100%; max-width: 420px; padding: 0 0 20px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,.2); animation: cal-slide-up .2s ease; overflow:hidden;
+}
+@media (min-width: 620px){
+  .cal-overlay{ align-items:center; }
+  .wheel-popup{ border-radius: 24px; }
+}
+@keyframes cal-slide-up{ from{ transform: translateY(30px); opacity:0; } to{ transform:none; opacity:1; } }
+
+/* ---------- Wheel picker header ---------- */
+.wheel-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--line);
+}
+.wheel-title{ font-family:'Kanit',sans-serif; font-weight:700; color: var(--teal-deep); font-size: 15.5px; }
+.wheel-text-btn{ background:none; border:none; font-size: 15px; font-weight:600; color: var(--ink-soft); padding: 4px 6px; }
+.wheel-done-btn{ color: var(--teal-deep); font-weight:700; }
+
+/* ---------- Wheel columns (day / month / year), always ค.ศ. ---------- */
+.wheel-area{
+  position: relative; display:flex; height: 220px; margin-top: 4px;
+}
+.wheel-highlight{
+  position:absolute; left:10px; right:10px; top:50%; transform: translateY(-50%);
+  height: 44px; background: var(--teal-light); border-radius: 12px; pointer-events:none; z-index:1;
+}
+.wheel-col{
+  flex:1; height: 220px; overflow-y:auto; scroll-snap-type: y mandatory; -webkit-overflow-scrolling:touch;
+  position:relative; z-index:2; scrollbar-width:none;
+  padding: 88px 0; /* (220 - 44) / 2, lets the first/last item scroll to the centered highlight */
+}
+.wheel-col::-webkit-scrollbar{ display:none; }
+.wheel-item{
+  height: 44px; display:flex; align-items:center; justify-content:center;
+  font-size: 16px; color: var(--ink-soft); scroll-snap-align:center; transition: font-size .1s, color .1s;
+}
+.wheel-item-active{ font-size: 19px; font-weight:700; color: var(--teal-deep); }
+
+.cal-footer{ padding: 14px 18px 0; }
+.cal-today-btn{
+  width:100%; border:none; border-radius: 999px; padding: 12px 16px; font-size: 14px; font-weight:700;
+  background: var(--teal-light); color: var(--teal-deep);
+}
+
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -547,11 +604,11 @@ const FIREBASE_CONFIG = {
             </div>
             <div class="field">
               <label class="field-label">วันหมดอายุ</label>
-              <input type="date" id="stockin-expiry" required>
+              <input type="text" id="stockin-expiry" class="date-input-custom" placeholder="วว/ดด/ปปปป" readonly required>
             </div>
             <div class="field">
               <label class="field-label">วันที่เติมเข้าคลัง</label>
-              <input type="date" id="stockin-date" required>
+              <input type="text" id="stockin-date" class="date-input-custom" placeholder="วว/ดด/ปปปป" readonly required>
             </div>
           </div>
           <button type="submit" class="btn btn-primary">➕ บันทึกการเติมพัสดุ</button>
@@ -614,7 +671,7 @@ const FIREBASE_CONFIG = {
             </div>
             <div class="field">
               <label class="field-label">วันที่ใช้</label>
-              <input type="date" id="stockout-date" required>
+              <input type="text" id="stockout-date" class="date-input-custom" placeholder="วว/ดด/ปปปป" readonly required>
             </div>
           </div>
           <p class="lot-hint" id="stockout-lot-hint"></p>
@@ -736,9 +793,176 @@ function daysBetween(iso){
   return Math.round((target - today) / 86400000);
 }
 function formatDateThai(iso){
+  // Displays DD/MM/YYYY in the Gregorian (ค.ศ.) calendar to match the date printed on supply packaging
   if(!iso) return '-';
-  const d = new Date(iso+'T00:00:00');
-  return d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'numeric' });
+  const [y, m, d] = iso.split('-');
+  if(!y || !m || !d) return '-';
+  return `${d}/${m}/${y}`;
+}
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+/* ================= CUSTOM DATE PICKER (always Gregorian / ค.ศ., ignores device calendar settings) ================= */
+function getDateValue(id){
+  const el = document.getElementById(id);
+  return el ? (el.dataset.iso || '') : '';
+}
+function setDateValue(id, iso){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.dataset.iso = iso || '';
+  el.value = iso ? formatDateThai(iso) : '';
+}
+
+// Wheel picker: three scrollable columns (day / month / year), year always ค.ศ. (Gregorian),
+// independent of the device's regional calendar setting.
+let CAL_TARGET_ID = null;
+let CAL_SEL_DAY = null, CAL_SEL_MONTH = null, CAL_SEL_YEAR = null; // month is 0-11
+const WHEEL_ITEM_H = 44;
+const WHEEL_YEAR_SPAN_BACK = 10;
+const WHEEL_YEAR_SPAN_FWD = 15;
+
+function daysInMonthOf(year, month0){ return new Date(year, month0+1, 0).getDate(); }
+
+function ensureCalendarOverlay(){
+  let overlay = document.getElementById('cal-overlay');
+  if(overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.id = 'cal-overlay';
+  overlay.className = 'cal-overlay hidden';
+  overlay.innerHTML = `
+    <div class="wheel-popup">
+      <div class="wheel-header">
+        <button type="button" class="wheel-text-btn" id="cal-close">ปิด</button>
+        <span class="wheel-title">เลือกวันที่ (ค.ศ.)</span>
+        <button type="button" class="wheel-text-btn wheel-done-btn" id="cal-done">เสร็จสิ้น</button>
+      </div>
+      <div class="wheel-area">
+        <div class="wheel-highlight"></div>
+        <div class="wheel-col" id="wheel-day"></div>
+        <div class="wheel-col" id="wheel-month"></div>
+        <div class="wheel-col" id="wheel-year"></div>
+      </div>
+      <div class="cal-footer">
+        <button type="button" class="cal-today-btn" id="cal-today">📅 ไปวันนี้</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', function(ev){
+    if(ev.target === overlay) closeCalendarPopup();
+  });
+  document.getElementById('cal-close').addEventListener('click', closeCalendarPopup);
+  document.getElementById('cal-done').addEventListener('click', confirmCalendarPopup);
+  document.getElementById('cal-today').addEventListener('click', function(){
+    const t = new Date();
+    setWheelSelection(t.getFullYear(), t.getMonth(), t.getDate(), true);
+  });
+
+  ['wheel-day','wheel-month','wheel-year'].forEach(colId=>{
+    const col = document.getElementById(colId);
+    let scrollTimer = null;
+    col.addEventListener('scroll', function(){
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(()=> onWheelColumnSettled(colId), 120);
+    });
+  });
+  return overlay;
+}
+
+function buildWheelColumn(colId, items, selectedIndex){
+  const col = document.getElementById(colId);
+  col.innerHTML = '';
+  items.forEach((label, idx)=>{
+    const item = document.createElement('div');
+    item.className = 'wheel-item';
+    item.textContent = label;
+    item.dataset.index = idx;
+    col.appendChild(item);
+  });
+  // scroll so the selected item sits centered under the highlight band
+  col.scrollTop = selectedIndex * WHEEL_ITEM_H;
+  highlightCenteredItem(colId);
+}
+
+function highlightCenteredItem(colId){
+  const col = document.getElementById(colId);
+  const idx = Math.round(col.scrollTop / WHEEL_ITEM_H);
+  [...col.children].forEach((el,i)=> el.classList.toggle('wheel-item-active', i===idx));
+}
+
+function onWheelColumnSettled(colId){
+  const col = document.getElementById(colId);
+  let idx = Math.round(col.scrollTop / WHEEL_ITEM_H);
+  const max = col.children.length - 1;
+  if(idx < 0) idx = 0;
+  if(idx > max) idx = max;
+  // snap exactly in case of partial scroll
+  col.scrollTop = idx * WHEEL_ITEM_H;
+  highlightCenteredItem(colId);
+
+  if(colId === 'wheel-day'){
+    CAL_SEL_DAY = idx + 1;
+  } else if(colId === 'wheel-month'){
+    CAL_SEL_MONTH = idx;
+    rebuildDayWheelForCurrentMonthYear();
+  } else if(colId === 'wheel-year'){
+    CAL_SEL_YEAR = CAL_YEAR_LIST[idx];
+    rebuildDayWheelForCurrentMonthYear();
+  }
+}
+
+let CAL_YEAR_LIST = [];
+
+function rebuildDayWheelForCurrentMonthYear(){
+  const maxDay = daysInMonthOf(CAL_SEL_YEAR, CAL_SEL_MONTH);
+  if(CAL_SEL_DAY > maxDay) CAL_SEL_DAY = maxDay;
+  const dayItems = [];
+  for(let d=1; d<=maxDay; d++) dayItems.push(String(d));
+  buildWheelColumn('wheel-day', dayItems, CAL_SEL_DAY-1);
+}
+
+function setWheelSelection(year, month0, day, scrollInstant){
+  CAL_SEL_YEAR = year; CAL_SEL_MONTH = month0; CAL_SEL_DAY = day;
+
+  const todayYear = new Date().getFullYear();
+  CAL_YEAR_LIST = [];
+  for(let y=todayYear-WHEEL_YEAR_SPAN_BACK; y<=todayYear+WHEEL_YEAR_SPAN_FWD; y++) CAL_YEAR_LIST.push(y);
+  let yearIdx = CAL_YEAR_LIST.indexOf(year);
+  if(yearIdx === -1){ CAL_YEAR_LIST.push(year); CAL_YEAR_LIST.sort((a,b)=>a-b); yearIdx = CAL_YEAR_LIST.indexOf(year); }
+
+  buildWheelColumn('wheel-month', THAI_MONTHS, month0);
+  buildWheelColumn('wheel-year', CAL_YEAR_LIST.map(String), yearIdx);
+  rebuildDayWheelForCurrentMonthYear();
+}
+
+function confirmCalendarPopup(){
+  if(CAL_TARGET_ID && CAL_SEL_YEAR != null){
+    const iso = `${CAL_SEL_YEAR}-${pad2(CAL_SEL_MONTH+1)}-${pad2(CAL_SEL_DAY)}`;
+    setDateValue(CAL_TARGET_ID, iso);
+    const el = document.getElementById(CAL_TARGET_ID);
+    if(el) el.dispatchEvent(new Event('datechange'));
+  }
+  closeCalendarPopup();
+}
+
+function openCalendarPopup(inputId){
+  ensureCalendarOverlay();
+  CAL_TARGET_ID = inputId;
+  const current = getDateValue(inputId);
+  const base = current ? new Date(current+'T00:00:00') : new Date();
+  setWheelSelection(base.getFullYear(), base.getMonth(), base.getDate());
+  document.getElementById('cal-overlay').classList.remove('hidden');
+}
+function closeCalendarPopup(){
+  const overlay = document.getElementById('cal-overlay');
+  if(overlay) overlay.classList.add('hidden');
+  CAL_TARGET_ID = null;
+}
+function initDatePicker(inputId){
+  const el = document.getElementById(inputId);
+  if(!el) return;
+  el.addEventListener('click', function(){ openCalendarPopup(inputId); });
 }
 function esc(str){
   const div = document.createElement('div');
@@ -1205,8 +1429,8 @@ document.getElementById('stockin-form').addEventListener('submit', function(ev){
   ev.preventDefault();
   const sel = document.getElementById('stockin-item-select');
   const qty = parseInt(document.getElementById('stockin-qty').value, 10);
-  const expiry = document.getElementById('stockin-expiry').value;
-  const date = document.getElementById('stockin-date').value;
+  const expiry = getDateValue('stockin-expiry');
+  const date = getDateValue('stockin-date');
   if(!qty || qty <= 0 || !expiry || !date) return;
 
   let item;
@@ -1231,14 +1455,15 @@ document.getElementById('stockin-form').addEventListener('submit', function(ev){
 
   this.reset();
   document.getElementById('stockin-newname-wrap').classList.add('hidden');
-  document.getElementById('stockin-date').value = todayISO();
+  setDateValue('stockin-expiry', ''); // clear stale picked date so the (required) field truly starts empty
+  setDateValue('stockin-date', todayISO());
   document.getElementById('stockin-minqty').value = '';
   refreshAllViews();
 });
 
 function renderStockIn(){
   refreshItemSelects();
-  if(!document.getElementById('stockin-date').value) document.getElementById('stockin-date').value = todayISO();
+  if(!getDateValue('stockin-date')) setDateValue('stockin-date', todayISO());
   const tbody = document.getElementById('stockin-tbody');
   tbody.innerHTML = '';
   const logs = [...DATA.stockInLog].sort((a,b)=> b.date.localeCompare(a.date)).slice(0,25);
@@ -1352,7 +1577,7 @@ document.getElementById('stockout-form').addEventListener('submit', function(ev)
   const itemId = document.getElementById('stockout-item-select').value;
   const batchId = document.getElementById('stockout-batch-select').value;
   const qty = parseInt(document.getElementById('stockout-qty').value, 10);
-  const date = document.getElementById('stockout-date').value;
+  const date = getDateValue('stockout-date');
   if(!itemId){ alert('กรุณาเลือกพัสดุ'); return; }
   if(!batchId){ alert('กรุณาเลือกล็อต/วันหมดอายุที่ใช้'); return; }
   if(!qty || qty <= 0 || !date) return;
@@ -1372,14 +1597,14 @@ document.getElementById('stockout-form').addEventListener('submit', function(ev)
   document.getElementById('stockout-available').value = '—';
   document.getElementById('stockout-lot-available').value = '—';
   document.getElementById('stockout-lot-hint').textContent = '';
-  document.getElementById('stockout-date').value = todayISO();
+  setDateValue('stockout-date', todayISO());
   refreshAllViews();
 });
 
 function renderStockOut(){
   refreshItemSelects();
   refreshStockoutBatchOptions();
-  if(!document.getElementById('stockout-date').value) document.getElementById('stockout-date').value = todayISO();
+  if(!getDateValue('stockout-date')) setDateValue('stockout-date', todayISO());
   const tbody = document.getElementById('stockout-tbody');
   tbody.innerHTML = '';
   const logs = [...DATA.stockOutLog].sort((a,b)=> b.date.localeCompare(a.date)).slice(0,25);
@@ -1450,7 +1675,7 @@ function populateReportFilters(){
   const keep = yearSel.value;
   yearSel.innerHTML = '<option value="">-- ทุกปี --</option>';
   [...years].sort().reverse().forEach(y=>{
-    const o = document.createElement('option'); o.value = y; o.textContent = (parseInt(y,10)+543); yearSel.appendChild(o);
+    const o = document.createElement('option'); o.value = y; o.textContent = y; yearSel.appendChild(o);
   });
   if([...yearSel.options].some(o=>o.value===keep)) yearSel.value = keep;
 }
@@ -1544,7 +1769,7 @@ function printReports(){
   }
   const inLogs = DATA.stockInLog.filter(matches).sort((a,b)=>a.date.localeCompare(b.date));
   const outLogs = DATA.stockOutLog.filter(matches).sort((a,b)=>a.date.localeCompare(b.date));
-  const label = (month ? THAI_MONTHS[parseInt(month,10)-1] : 'ทุกเดือน') + ' ' + (year ? (parseInt(year,10)+543) : 'ทุกปี') +
+  const label = (month ? THAI_MONTHS[parseInt(month,10)-1] : 'ทุกเดือน') + ' ' + (year ? year : 'ทุกปี') +
                 (search ? ` • ค้นหา: "${esc(search)}"` : '');
 
   let html = `<h1>คลังพัสดุวอร์ด - สรุปรายเดือน</h1>
@@ -1574,8 +1799,11 @@ function refreshAllViews(){
 }
 
 /* ================= INIT ================= */
-document.getElementById('stockin-date').value = todayISO();
-document.getElementById('stockout-date').value = todayISO();
+initDatePicker('stockin-expiry');
+initDatePicker('stockin-date');
+initDatePicker('stockout-date');
+setDateValue('stockin-date', todayISO());
+setDateValue('stockout-date', todayISO());
 initAuth();
 
 </script>
